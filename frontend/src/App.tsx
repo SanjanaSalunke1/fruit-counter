@@ -8,14 +8,22 @@ type Box = {
   confidence: number;
   color: 'green' | 'red' | 'yellow' | string;
   color_confidence: number;
+  maturity?: 'Ripe' | 'Overripe' | string;
+  maturity_confidence?: number;
 };
 
 type ColorCounts = Record<string, number>;
+type BoxMode = 'maturity' | 'color';
 
 const colorStyles: Record<string, string> = {
   green: '#22c55e',
   red: '#ef4444',
   yellow: '#eab308',
+};
+
+const maturityStyles: Record<string, string> = {
+  Ripe: '#22c55e',
+  Overripe: '#f97316',
 };
 
 function App() {
@@ -24,6 +32,8 @@ function App() {
   const [fruitCount, setFruitCount] = useState<number | null>(null);
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [colorCounts, setColorCounts] = useState<ColorCounts | null>(null);
+  const [maturityCounts, setMaturityCounts] = useState<ColorCounts | null>(null);
+  const [boxMode, setBoxMode] = useState<BoxMode>('maturity');
   const [minConfidence, setMinConfidence] = useState(0.35);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +52,7 @@ function App() {
     setFruitCount(null);
     setBoxes([]);
     setColorCounts(null);
+    setMaturityCounts(null);
     setError(null);
 
     const file = event.target.files?.[0] ?? null;
@@ -92,6 +103,7 @@ function App() {
       setFruitCount(data.total_bell_pepper_count ?? data.fruit_count);
       setBoxes(data.boxes ?? []);
       setColorCounts(data.color_counts ?? { green: 0, red: 0, yellow: 0 });
+      setMaturityCounts(data.maturity_counts ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
       console.error(err);
@@ -104,7 +116,7 @@ function App() {
     <div className="app-shell">
       <header>
         <h1>Fruit Counter</h1>
-        <p>Upload a bell pepper photo to count peppers by color.</p>
+        <p>Upload a bell pepper photo to count peppers by color and maturity.</p>
       </header>
 
       <main>
@@ -125,6 +137,21 @@ function App() {
               value={minConfidence}
               onChange={(event) => setMinConfidence(parseFloat(event.target.value))}
             />
+          </div>
+
+          <div className="mode-row" role="group" aria-label="Color boxes by">
+            <span>Color boxes by</span>
+            {(['maturity', 'color'] as BoxMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`mode-button${boxMode === mode ? ' active' : ''}`}
+                aria-pressed={boxMode === mode}
+                onClick={() => setBoxMode(mode)}
+              >
+                {mode === 'maturity' ? 'Maturity' : 'Color'}
+              </button>
+            ))}
           </div>
 
           <button onClick={handleUpload} disabled={!selectedFile || isLoading}>
@@ -148,7 +175,14 @@ function App() {
                   const width = ((box.x2 - box.x1) / imageSize.width) * 100;
                   const height = ((box.y2 - box.y1) / imageSize.height) * 100;
                   const color = box.color.toLowerCase();
-                  const colorStyle = colorStyles[color] ?? '#38bdf8';
+                  const maturity = box.maturity;
+                  const colorStyle =
+                    boxMode === 'maturity' && maturity
+                      ? maturityStyles[maturity] ?? '#38bdf8'
+                      : colorStyles[color] ?? '#38bdf8';
+                  const label = maturity
+                    ? `${maturity} ${Math.round((box.maturity_confidence ?? 0) * 100)}% · ${color}`
+                    : color;
 
                   return (
                     <div
@@ -164,7 +198,7 @@ function App() {
                     >
                       <span className="box-color-label">
                         <i style={{ backgroundColor: colorStyle }} />
-                        {color}
+                        {label}
                       </span>
                     </div>
                   );
@@ -175,11 +209,28 @@ function App() {
           {fruitCount !== null && colorCounts && (
             <div className="result">
               Total bell peppers: <strong>{fruitCount}</strong>
-              {Object.entries(colorCounts).map(([color, count]) => (
-                <div key={color} style={{ textTransform: 'capitalize' }}>
-                  {color}: <strong>{count}</strong>
+              <div className="count-groups">
+                {maturityCounts && (
+                  <div>
+                    <h3>Maturity</h3>
+                    {Object.entries(maturityCounts).map(([maturity, count]) => (
+                      <div key={maturity}>
+                        <i className="swatch" style={{ backgroundColor: maturityStyles[maturity] ?? '#38bdf8' }} />
+                        {maturity}: <strong>{count}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <h3>Color</h3>
+                  {Object.entries(colorCounts).map(([color, count]) => (
+                    <div key={color} style={{ textTransform: 'capitalize' }}>
+                      <i className="swatch" style={{ backgroundColor: colorStyles[color] ?? '#38bdf8' }} />
+                      {color}: <strong>{count}</strong>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </section>

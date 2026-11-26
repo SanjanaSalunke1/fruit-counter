@@ -79,6 +79,20 @@ except RuntimeError as error:
     ) from error
 color_model.eval()
 
+# Maturity classifier: YOLO11n-cls trained on VegNet bell peppers (see maturity/).
+# Ripe = fresh pepper, Overripe = old (wrinkled) or dried pepper.
+MATURITY_MODEL_PATH = MODEL_DIR / "maturity_yolo11n_cls.pt"
+if not MATURITY_MODEL_PATH.is_file():
+    raise FileNotFoundError(
+        f"Maturity model not found: {MATURITY_MODEL_PATH}. "
+        "Train it with maturity/train.py or place maturity_yolo11n_cls.pt in backend/model."
+    )
+maturity_model = YOLO(str(MATURITY_MODEL_PATH))
+MATURITY_CLASSES = [maturity_model.names[index] for index in sorted(maturity_model.names)]
+# Unlike the colour crop (trimmed inward), maturity needs the whole fruit outline
+# (wrinkles, shrivelled shape), so its crop is padded outward instead.
+MATURITY_PAD = float(os.getenv("MATURITY_PAD", "0.08"))
+
 color_transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -137,6 +151,17 @@ def classify_crop(crop_bgr):
     return model_color, model_confidence
 
 
+def classify_maturity(image_bgr, x1, y1, x2, y2):
+    """Ripe / Overripe for one detected pepper. Ultralytics reads numpy arrays as BGR."""
+    height, width = image_bgr.shape[:2]
+    pad_x, pad_y = int((x2 - x1) * MATURITY_PAD), int((y2 - y1) * MATURITY_PAD)
+    crop = image_bgr[max(0, y1 - pad_y):min(height, y2 + pad_y),
+                     max(0, x1 - pad_x):min(width, x2 + pad_x)]
+    result = maturity_model(crop, imgsz=224, verbose=False)[0]
+    class_index = int(result.probs.top1)
+    return result.names[class_index], float(result.probs.top1conf.item())
+
+
 @app.post("/count")
 async def count_fruits(file: UploadFile = File(...), min_conf: float = 0.35):
     image_bytes = await file.read()
@@ -149,6 +174,7 @@ async def count_fruits(file: UploadFile = File(...), min_conf: float = 0.35):
     detections = results[0].boxes
     boxes = []
     color_counts = {label: 0 for label in COLOR_CLASSES}
+    maturity_counts = {label: 0 for label in MATURITY_CLASSES}
 
     if detections is not None and len(detections):
         coords_list = detections.xyxy.cpu().numpy()
@@ -178,6 +204,8 @@ async def count_fruits(file: UploadFile = File(...), min_conf: float = 0.35):
                 image[inner_y1:inner_y2, inner_x1:inner_x2]
             )
             color_counts[color] += 1
+            maturity, maturity_confidence = classify_maturity(image, x1, y1, x2, y2)
+            maturity_counts[maturity] += 1
             boxes.append({
                 "x1": x1,
                 "y1": y1,
@@ -186,12 +214,15 @@ async def count_fruits(file: UploadFile = File(...), min_conf: float = 0.35):
                 "confidence": float(detection_confidence),
                 "color": color,
                 "color_confidence": color_confidence,
+                "maturity": maturity,
+                "maturity_confidence": maturity_confidence,
             })
 
     return {
         "fruit_count": len(boxes),
         "total_bell_pepper_count": len(boxes),
         "color_counts": color_counts,
+        "maturity_counts": maturity_counts,
         "boxes": boxes,
     }
 

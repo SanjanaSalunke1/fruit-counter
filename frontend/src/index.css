@@ -152,7 +152,6 @@ button:not(:disabled):hover {
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
-  text-transform: capitalize;
 }
 
 .box-color-label i {
@@ -175,4 +174,57 @@ button:not(:disabled):hover {
   border-radius: 1rem;
   background: rgba(34, 197, 94, 0.12);
   color: #d9f99d;
+}
+
+.mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.mode-row span {
+  margin-right: 0.25rem;
+}
+
+.mode-row .mode-button {
+  width: auto;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.mode-row .mode-button.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: white;
+}
+
+.count-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  margin-top: 0.75rem;
+}
+
+.count-groups h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
 }
