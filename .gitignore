@@ -3,7 +3,11 @@ __pycache__/
 *.pyc
 .env
 maturity/data/
-maturity/runs/
+maturity/health_data/
+
 
 node_modules/
 frontend/dist/
+dataset/
+
+maturity/runs/

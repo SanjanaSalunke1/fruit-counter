@@ -8,7 +8,7 @@ type Box = {
   confidence: number;
   color: 'green' | 'red' | 'yellow' | string;
   color_confidence: number;
-  maturity?: 'Ripe' | 'Overripe' | string;
+  maturity?: 'healthy' | 'unhealthy' | string;
   maturity_confidence?: number;
 };
 
@@ -22,8 +22,8 @@ const colorStyles: Record<string, string> = {
 };
 
 const maturityStyles: Record<string, string> = {
-  Ripe: '#22c55e',
-  Overripe: '#f97316',
+  healthy: '#22c55e',
+  unhealthy: '#ef4444',
 };
 
 function App() {

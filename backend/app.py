@@ -79,18 +79,32 @@ except RuntimeError as error:
     ) from error
 color_model.eval()
 
-# Maturity classifier: YOLO11n-cls trained on VegNet bell peppers (see maturity/).
-# Ripe = fresh pepper, Overripe = old (wrinkled) or dried pepper.
-MATURITY_MODEL_PATH = MODEL_DIR / "maturity_yolo11n_cls.pt"
+# Maturity (health) classifier: ImageNet-pretrained torchvision model fine-tuned on
+# healthy / unhealthy bell peppers (see maturity/train_health.py). The checkpoint
+# records its own architecture, class names and input size.
+MATURITY_MODEL_PATH = MODEL_DIR / "health_classifier.pth"
 if not MATURITY_MODEL_PATH.is_file():
     raise FileNotFoundError(
         f"Maturity model not found: {MATURITY_MODEL_PATH}. "
-        "Train it with maturity/train.py or place maturity_yolo11n_cls.pt in backend/model."
+        "Train it with: python maturity/train_health.py --export"
     )
-maturity_model = YOLO(str(MATURITY_MODEL_PATH))
-MATURITY_CLASSES = [maturity_model.names[index] for index in sorted(maturity_model.names)]
-# Unlike the colour crop (trimmed inward), maturity needs the whole fruit outline
-# (wrinkles, shrivelled shape), so its crop is padded outward instead.
+maturity_ckpt = torch.load(MATURITY_MODEL_PATH, map_location="cpu")
+MATURITY_CLASSES = list(maturity_ckpt["classes"])
+_maturity_builders = {"convnext_tiny": models.convnext_tiny, "efficientnet_v2_s": models.efficientnet_v2_s}
+maturity_model = _maturity_builders[maturity_ckpt["arch"]](weights=None)
+_head_index = 2 if maturity_ckpt["arch"].startswith("convnext") else 1
+maturity_model.classifier[_head_index] = torch.nn.Linear(
+    maturity_model.classifier[_head_index].in_features, len(MATURITY_CLASSES)
+)
+maturity_model.load_state_dict(maturity_ckpt["state_dict"])
+maturity_model.eval()
+maturity_transform = transforms.Compose([
+    transforms.Resize((maturity_ckpt["img_size"], maturity_ckpt["img_size"])),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+# Unlike the colour crop (trimmed inward), health needs the whole fruit outline
+# (spots, rot, shrivelled shape), so its crop is padded outward instead.
 MATURITY_PAD = float(os.getenv("MATURITY_PAD", "0.08"))
 
 color_transform = transforms.Compose([
@@ -152,14 +166,16 @@ def classify_crop(crop_bgr):
 
 
 def classify_maturity(image_bgr, x1, y1, x2, y2):
-    """Ripe / Overripe for one detected pepper. Ultralytics reads numpy arrays as BGR."""
+    """healthy / unhealthy for one detected pepper (padded crop of the BGR image)."""
     height, width = image_bgr.shape[:2]
     pad_x, pad_y = int((x2 - x1) * MATURITY_PAD), int((y2 - y1) * MATURITY_PAD)
     crop = image_bgr[max(0, y1 - pad_y):min(height, y2 + pad_y),
                      max(0, x1 - pad_x):min(width, x2 + pad_x)]
-    result = maturity_model(crop, imgsz=224, verbose=False)[0]
-    class_index = int(result.probs.top1)
-    return result.names[class_index], float(result.probs.top1conf.item())
+    tensor = maturity_transform(Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))).unsqueeze(0)
+    with torch.inference_mode():
+        probabilities = torch.softmax(maturity_model(tensor)[0], dim=0)
+    class_index = int(torch.argmax(probabilities).item())
+    return MATURITY_CLASSES[class_index], float(probabilities[class_index].item())
 
 
 @app.post("/count")
