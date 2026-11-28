@@ -1,4 +1,15 @@
+# Python
 venv/
 __pycache__/
 *.pyc
 .env
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+
+# Runtime output
+backend/logs/
+backend/server.*.log
+Ultralytics/
+
